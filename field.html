@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Staff Punch</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: -apple-system, sans-serif; margin: 0; padding: 14px; background: #f4f6f8; text-align: center; }
+    .card { background: #ffffff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    video { width: 100%; height: 230px; object-fit: cover; border-radius: 8px; background: #000; }
+    input { width: 100%; box-sizing: border-box; padding: 12px; margin-top: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 15px; }
+    .btn { width: 100%; padding: 14px; margin-top: 14px; background: #0088cc; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+    .btn:disabled { background: #ccc; cursor: not-allowed; }
+    #gps-msg { font-size: 13px; color: #666; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <video id="viewfinder" autoplay playsinline muted></video>
+    <canvas id="canvas" style="display: none;"></canvas>
+
+    <input type="text" id="notes" placeholder="Notes / Client name (or 'Office Check-In')...">
+    <div id="gps-msg">📡 Locating GPS position...</div>
+
+    <button class="btn" id="submitBtn" disabled>Submit Report</button>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    const video = document.getElementById('viewfinder');
+    const canvas = document.getElementById('canvas');
+    const notesInput = document.getElementById('notes');
+    const gpsMsg = document.getElementById('gps-msg');
+    const submitBtn = document.getElementById('submitBtn');
+
+    let userLat = null;
+    let userLng = null;
+
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" },
+      audio: false
+    }).then(stream => { video.srcObject = stream; })
+      .catch(err => { gpsMsg.innerText = "Camera error: " + err.message; });
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        userLat = pos.coords.latitude;
+        userLng = pos.coords.longitude;
+        gpsMsg.innerText = `📍 GPS Locked (Accuracy: ±${Math.round(pos.coords.accuracy)}m)`;
+        checkReady();
+      },
+      (err) => { gpsMsg.innerText = "⚠️ Please grant location permission."; },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+
+    notesInput.addEventListener('input', checkReady);
+
+    function checkReady() {
+      if (userLat && notesInput.value.trim().length > 0) {
+        submitBtn.disabled = false;
+      } else {
+        submitBtn.disabled = true;
+      }
+    }
+
+    submitBtn.addEventListener('click', () => {
+      submitBtn.disabled = true;
+      submitBtn.innerText = "Submitting...";
+
+      canvas.width = 480;
+      canvas.height = 360;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const payload = {
+        lat: userLat,
+        lng: userLng,
+        notes: notesInput.value.trim(),
+        photo: canvas.toDataURL('image/jpeg', 0.6)
+      };
+
+      tg.sendData(JSON.stringify(payload));
+    });
+  </script>
+</body>
+</html>
